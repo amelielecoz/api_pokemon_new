@@ -25,8 +25,7 @@ class ImportDataCommand extends Command
 
     const COLUMN_POKEDEX_ID = 0;
     const COLUMN_NAME = 1;
-    const COLUMN_TYPE_1 = 2;
-    const COLUMN_TYPE_2 = 3;
+    const COLUMN_TYPES = [2, 3];
     const COLUMN_TOTAL = 4;
     const COLUMN_HIT_POINT = 5;
     const COLUMN_ATTACK = 6;
@@ -74,6 +73,8 @@ class ImportDataCommand extends Command
         $row = 1;
         if (($handle = fopen($this->filepath, "r")) !== false) {
             $flag = true;
+
+            //keep in memory the Pokemon types
             $pokemonTypes = [];
 
             $fp = file($this->filepath, FILE_SKIP_EMPTY_LINES);
@@ -91,26 +92,7 @@ class ImportDataCommand extends Command
                 $row++;
                 $progressBar->advance();
 
-                $type1Name = $data[2];
-                $type2Name = $data[3];
-
-                if (!in_array($type1Name, $pokemonTypes) && $type1Name) {
-                    $pokemonTypes[] = $data[2];
-                    $type1 = new PokemonType();
-                    $type1->setName($type1Name);
-                    $this->manager->persist($type1);
-
-                    $this->manager->flush();
-                }
-
-                if (!in_array($type2Name, $pokemonTypes) && $type2Name) {
-                    $pokemonTypes[] = $data[3];
-                    $type2 = new PokemonType();
-                    $type2->setName($type2Name);
-                    $this->manager->persist($type2);
-
-                    $this->manager->flush();
-                }
+                $this->loadPokemonTypes($data, $pokemonTypes);
 
                 $this->loadPokemons($data);
             }
@@ -127,12 +109,10 @@ class ImportDataCommand extends Command
         $pokemon->setPokedexId(intval($data[self::COLUMN_POKEDEX_ID]));
         $pokemon->setName($data[self::COLUMN_NAME]);
 
-        if ($data[self::COLUMN_TYPE_1]) {
-            $pokemon->addType($this->pokemonTypeRepository->findOneBy(['name' => $data[self::COLUMN_TYPE_1]]));
-        }
-
-        if ($data[self::COLUMN_TYPE_2]) {
-            $pokemon->addType($this->pokemonTypeRepository->findOneBy(['name' => $data[self::COLUMN_TYPE_2]]));
+        foreach (self::COLUMN_TYPES as $COLUMN_TYPE) {
+            if ($data[$COLUMN_TYPE]) {
+                $pokemon->addType($this->pokemonTypeRepository->findOneBy(['name' => $data[$COLUMN_TYPE]]));
+            }
         }
 
         $pokemon->setTotal(intval($data[self::COLUMN_TOTAL]));
@@ -146,5 +126,37 @@ class ImportDataCommand extends Command
         $pokemon->setLegendary($data[self::COLUMN_LEGENDARY]);
         $this->manager->persist($pokemon);
         $this->manager->flush();
+    }
+
+    /**
+     * @param mixed $pokemonType
+     * @return void
+     */
+    public function savePokemonType(mixed $pokemonType): void
+    {
+        $type1 = new PokemonType();
+        $type1->setName($pokemonType);
+        $this->manager->persist($type1);
+
+        $this->manager->flush();
+    }
+
+    /**
+     * @param array $data
+     * @param array $pokemonTypes
+     * @return void
+     */
+    public function loadPokemonTypes(array $data, array $pokemonTypes): void
+    {
+        foreach (self::COLUMN_TYPES as $COLUMN_TYPE) {
+            if (!empty($data[$COLUMN_TYPE])) {
+                $pokemonType = $data[$COLUMN_TYPE];
+
+                if (!in_array($pokemonType, $pokemonTypes)) {
+                    $pokemonTypes[] = $pokemonType;
+                    $this->savePokemonType($pokemonType);
+                }
+            }
+        }
     }
 }
